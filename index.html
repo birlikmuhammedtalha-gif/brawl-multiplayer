@@ -2,54 +2,62 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Brawl Arena Multiplayer</title>
 <script src="/socket.io/socket.io.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#1a1a2e;font-family:Arial,sans-serif;display:flex;justify-content:center;min-height:100vh;}
-#root{width:620px;display:flex;flex-direction:column;align-items:center;padding:10px 0;}
-#lobby{width:100%;display:flex;flex-direction:column;align-items:center;padding:24px 20px;gap:12px;}
-#lobby h1{color:#f5a623;font-size:26px;}
-#lobby p{color:#888;font-size:13px;}
-.section{background:#2d3250;border-radius:10px;padding:16px;width:320px;}
-.section h3{color:#fff;font-size:13px;margin-bottom:10px;}
+body{background:#1a1a2e;font-family:Arial,sans-serif;display:flex;justify-content:center;min-height:100vh;overflow:hidden;}
+#root{width:100%;max-width:620px;display:flex;flex-direction:column;align-items:center;padding:8px 0;}
+
+/* LOBBY */
+#lobby{width:100%;display:flex;flex-direction:column;align-items:center;padding:20px 16px;gap:10px;}
+#lobby h1{color:#f5a623;font-size:24px;}
+#lobby p{color:#888;font-size:12px;}
+.section{background:#2d3250;border-radius:10px;padding:14px;width:100%;max-width:320px;}
+.section h3{color:#fff;font-size:12px;margin-bottom:8px;}
 input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:13px;margin-bottom:8px;}
-.btn{width:100%;padding:10px;border-radius:8px;border:none;font-size:14px;font-weight:bold;cursor:pointer;margin-bottom:6px;}
+.btn{width:100%;padding:11px;border-radius:8px;border:none;font-size:14px;font-weight:bold;cursor:pointer;margin-bottom:6px;touch-action:manipulation;}
 .btn-orange{background:#f5a623;color:#000;}
-.btn-orange:hover{background:#ffbe4d;}
 .btn-purple{background:#7c3aed;color:#fff;}
-.btn-purple:hover{background:#6d28d9;}
 .btn-gray{background:#3a4070;color:#fff;}
-.btn-gray:hover{background:#4a5090;}
-.btn-red{background:#e74c3c;color:#fff;}
-.btn-red:hover{background:#c0392b;}
-#status{color:#4caf50;font-size:12px;text-align:center;min-height:16px;}
+#status{color:#4caf50;font-size:12px;text-align:center;}
 #playerList{color:#aaa;font-size:12px;line-height:1.9;}
-#matchStatus{text-align:center;padding:14px;color:#f5a623;font-size:14px;}
-.spinner{display:inline-block;width:20px;height:20px;border:3px solid #444;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:8px;vertical-align:middle;}
+#matchStatus{text-align:center;padding:10px;color:#f5a623;font-size:13px;}
+.spinner{display:inline-block;width:16px;height:16px;border:3px solid #444;border-top-color:#f5a623;border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:middle;}
 @keyframes spin{to{transform:rotate(360deg);}}
-#hud{display:flex;justify-content:space-between;align-items:center;width:600px;margin-bottom:5px;color:#fff;font-size:12px;min-height:32px;}
+.divider{width:100%;max-width:320px;text-align:center;color:#555;font-size:11px;margin:2px 0;position:relative;}
+.divider::before,.divider::after{content:'';position:absolute;top:50%;width:42%;height:1px;background:#444;}
+.divider::before{left:0;}.divider::after{right:0;}
+
+/* GAME */
+#gameArea{display:none;flex-direction:column;align-items:center;width:100%;position:relative;}
+#myTeamBadge{font-size:12px;font-weight:bold;text-align:center;margin-bottom:3px;}
+#hud{display:flex;justify-content:space-between;align-items:center;width:100%;max-width:600px;margin-bottom:4px;color:#fff;font-size:11px;padding:0 4px;}
 .thud{display:flex;flex-direction:column;gap:2px;}
 .mbars{display:flex;flex-direction:column;gap:2px;}
 .mbar-row{display:flex;align-items:center;gap:3px;}
-.bar-bg{width:65px;height:6px;background:#333;border-radius:3px;overflow:hidden;}
+.bar-bg{width:55px;height:5px;background:#333;border-radius:3px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:3px;transition:width 0.1s;}
-#scoreboard{text-align:center;color:#f5a623;font-size:18px;font-weight:bold;}
-#gameCanvas{border:2px solid #444;border-radius:8px;display:block;}
-#ctrl{margin-top:5px;color:#555;font-size:11px;text-align:center;}
-#overlay{position:absolute;top:48px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.93);border-radius:12px;padding:20px 32px;text-align:center;color:#fff;z-index:10;min-width:230px;display:none;}
-#overlay h2{font-size:21px;font-weight:bold;margin-bottom:5px;}
-#overlay p{color:#aaa;font-size:12px;margin-bottom:13px;line-height:1.8;}
-.obtn{background:#f5a623;color:#000;border:none;border-radius:8px;padding:7px 18px;font-size:13px;font-weight:bold;cursor:pointer;margin:3px;}
-.obtn:hover{background:#ffbe4d;}
-.obtn2{background:#444;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:13px;cursor:pointer;margin:3px;}
-.obtn2:hover{background:#555;}
-#myTeamBadge{font-size:13px;font-weight:bold;text-align:center;margin-bottom:4px;}
-#gameArea{display:none;flex-direction:column;align-items:center;width:100%;}
-.divider{width:320px;text-align:center;color:#555;font-size:11px;margin:2px 0;position:relative;}
-.divider::before,.divider::after{content:'';position:absolute;top:50%;width:42%;height:1px;background:#444;}
-.divider::before{left:0;}.divider::after{right:0;}
+#scoreboard{text-align:center;color:#f5a623;font-size:16px;font-weight:bold;}
+#gameCanvas{border:2px solid #444;border-radius:8px;display:block;width:100%;max-width:600px;touch-action:none;}
+
+/* MOBİL KONTROLLER */
+#mobileControls{display:none;width:100%;max-width:600px;padding:8px 4px;position:relative;height:130px;}
+#joystickZone{position:absolute;left:10px;bottom:10px;width:110px;height:110px;}
+#joystickBase{width:110px;height:110px;background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.2);border-radius:50%;position:absolute;}
+#joystickKnob{width:44px;height:44px;background:rgba(255,255,255,0.4);border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);transition:none;}
+#fireBtn{position:absolute;right:10px;bottom:10px;width:80px;height:80px;background:rgba(231,76,60,0.7);border:2px solid rgba(231,76,60,0.9);border-radius:50%;color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;user-select:none;}
+#fireBtn:active{background:rgba(231,76,60,1);}
+#kickBtn{position:absolute;right:100px;bottom:10px;width:65px;height:65px;background:rgba(91,142,245,0.7);border:2px solid rgba(91,142,245,0.9);border-radius:50%;color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;user-select:none;display:none;}
+#kickBtn:active{background:rgba(91,142,245,1);}
+
+#overlay{position:absolute;top:40px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.93);border-radius:12px;padding:18px 28px;text-align:center;color:#fff;z-index:10;min-width:200px;display:none;}
+#overlay h2{font-size:19px;font-weight:bold;margin-bottom:5px;}
+#overlay p{color:#aaa;font-size:11px;margin-bottom:12px;line-height:1.8;}
+.obtn{background:#f5a623;color:#000;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:bold;cursor:pointer;margin:3px;touch-action:manipulation;}
+.obtn2{background:#444;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;cursor:pointer;margin:3px;}
+#waitingSection{display:none;}
 </style>
 </head>
 <body>
@@ -57,7 +65,6 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
   <div id="lobby">
     <h1>⚡ Brawl Arena</h1>
     <p>Arkadaşınla veya rastgele biriyle oyna!</p>
-
     <div class="section">
       <h3>🎮 Oyun Modu</h3>
       <select id="modeSelect">
@@ -65,24 +72,19 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
         <option value="soccer">⚽ Futbol (3 gol kazandırır)</option>
       </select>
     </div>
-
     <div class="section">
       <h3>🎲 Rastgele Eşleşme</h3>
       <div id="matchStatus" style="display:none;"></div>
       <button class="btn btn-purple" id="randomBtn" onclick="findMatch()">🎲 Rastgele Oyun Bul</button>
     </div>
-
     <div class="divider">veya</div>
-
     <div class="section">
       <h3>🚪 Arkadaşınla Oyna</h3>
       <input id="roomInput" placeholder="Oda kodu (örn: oda123)" maxlength="20"/>
       <button class="btn btn-orange" onclick="joinRoom()">Odaya Katıl / Oluştur</button>
     </div>
-
     <div id="status"></div>
-
-    <div class="section" id="waitingSection" style="display:none;">
+    <div class="section" id="waitingSection">
       <h3>👥 Odadaki Oyuncular</h3>
       <div id="playerList"></div>
       <br>
@@ -94,12 +96,19 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
   <div id="gameArea">
     <div id="myTeamBadge"></div>
     <div id="hud">
-      <div class="thud"><span style="font-size:13px;font-weight:bold;color:#5b8ef5">🔵 Mavi</span><div class="mbars" id="bluebars"></div></div>
+      <div class="thud"><span style="font-size:12px;font-weight:bold;color:#5b8ef5">🔵 Mavi</span><div class="mbars" id="bluebars"></div></div>
       <div id="scoreboard">0 — 0</div>
-      <div class="thud" style="align-items:flex-end"><span style="font-size:13px;font-weight:bold;color:#e74c3c">🔴 Kırmızı</span><div class="mbars" id="redbars"></div></div>
+      <div class="thud" style="align-items:flex-end"><span style="font-size:12px;font-weight:bold;color:#e74c3c">🔴 Kırmızı</span><div class="mbars" id="redbars"></div></div>
     </div>
     <canvas id="gameCanvas" width="600" height="420"></canvas>
-    <div id="ctrl">WASD / Ok tuşları hareket · C / Ç ateş & top at</div>
+    <div id="mobileControls">
+      <div id="joystickZone">
+        <div id="joystickBase"></div>
+        <div id="joystickKnob"></div>
+      </div>
+      <div id="fireBtn">🔥</div>
+      <div id="kickBtn">⚽</div>
+    </div>
     <div id="overlay">
       <h2 id="ovTitle"></h2><p id="ovDesc"></p><div id="ovBtns"></div>
     </div>
@@ -110,118 +119,151 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
 const socket=io();
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d');
-const W=600,H=420;
+const CW=600,CH=420;
 let myId=null,myTeam=null,myRoomId=null,myMode='arena';
 let players={},ball=null,bullets=[],particles=[];
 let keys={},score={blue:0,red:0};
 let goalFlash=0,goalText='',goalLocked=false,isHost=false;
 let ammo=5,reloadTimer=0,shootCooldown=0,kickCooldown=0;
 let searching=false;
+let isMobile=false;
 
-const GOAL_H=110,GOAL_TOP=(H-GOAL_H)/2,GOAL_BOT=(H+GOAL_H)/2,GOAL_W=20;
+const GOAL_H=110,GOAL_TOP=(CH-GOAL_H)/2,GOAL_BOT=(CH+GOAL_H)/2,GOAL_W=20;
 const TEAM_COLORS={blue:'#5b8ef5',red:'#e74c3c'};
 
-// ---- SOCKET EVENTS ----
+// Mobil tespiti
+function detectMobile(){
+  return /Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent)||window.innerWidth<600;
+}
+
+// Canvas ölçekleme
+function resizeCanvas(){
+  const maxW=Math.min(window.innerWidth-8,600);
+  canvas.style.width=maxW+'px';
+  canvas.style.height=(maxW*CH/CW)+'px';
+}
+window.addEventListener('resize',resizeCanvas);
+resizeCanvas();
+
+// Joystick
+let joystickActive=false,joystickDx=0,joystickDy=0;
+let fireBtnDown=false,kickBtnDown=false;
+const jZone=document.getElementById('joystickZone');
+const jKnob=document.getElementById('joystickKnob');
+const jBase=document.getElementById('joystickBase');
+const fireBtn=document.getElementById('fireBtn');
+const kickBtn=document.getElementById('kickBtn');
+const JRADIUS=33;
+
+function getJoystickPos(e){
+  const rect=jBase.getBoundingClientRect();
+  const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+  const touch=e.touches?e.touches[0]:e;
+  let dx=touch.clientX-cx,dy=touch.clientY-cy;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist>JRADIUS){dx=dx/dist*JRADIUS;dy=dy/dist*JRADIUS;}
+  return{dx,dy};
+}
+
+jZone.addEventListener('touchstart',e=>{
+  e.preventDefault();joystickActive=true;
+  const {dx,dy}=getJoystickPos(e);
+  joystickDx=dx/JRADIUS;joystickDy=dy/JRADIUS;
+  jKnob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+},{passive:false});
+jZone.addEventListener('touchmove',e=>{
+  e.preventDefault();
+  const {dx,dy}=getJoystickPos(e);
+  joystickDx=dx/JRADIUS;joystickDy=dy/JRADIUS;
+  jKnob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+},{passive:false});
+jZone.addEventListener('touchend',e=>{
+  e.preventDefault();joystickActive=false;joystickDx=0;joystickDy=0;
+  jKnob.style.transform='translate(-50%,-50%)';
+},{passive:false});
+
+fireBtn.addEventListener('touchstart',e=>{e.preventDefault();fireBtnDown=true;},{passive:false});
+fireBtn.addEventListener('touchend',e=>{e.preventDefault();fireBtnDown=false;},{passive:false});
+kickBtn.addEventListener('touchstart',e=>{e.preventDefault();kickBtnDown=true;},{passive:false});
+kickBtn.addEventListener('touchend',e=>{e.preventDefault();kickBtnDown=false;},{passive:false});
+
+// SOCKET
 socket.on('joinedRoom',({playerId,team,roomId})=>{
   myId=playerId;myTeam=team;myRoomId=roomId;
   document.getElementById('status').textContent=`✅ Takım: ${team==='blue'?'🔵 Mavi':'🔴 Kırmızı'}`;
   document.getElementById('waitingSection').style.display='block';
 });
-
 socket.on('waitingForMatch',({message})=>{
   searching=true;
   const ms=document.getElementById('matchStatus');
   ms.style.display='block';
   ms.innerHTML=`<span class="spinner"></span>${message}`;
-  document.getElementById('randomBtn').textContent='❌ İptal Et';
+  document.getElementById('randomBtn').textContent='❌ İptal';
   document.getElementById('randomBtn').onclick=cancelMatch;
 });
-
 socket.on('matchCancelled',()=>{
   searching=false;
-  const ms=document.getElementById('matchStatus');
-  ms.style.display='none';
+  document.getElementById('matchStatus').style.display='none';
   document.getElementById('randomBtn').textContent='🎲 Rastgele Oyun Bul';
   document.getElementById('randomBtn').onclick=findMatch;
 });
-
 socket.on('roomUpdate',({players:pl,score:sc,mode,playerCount})=>{
   players=pl;score=sc;if(mode)myMode=mode;
   updateLobbyList();
-  if(playerCount>=2){
-    document.getElementById('startBtn').style.display='block';
-    document.getElementById('waitingMsg').textContent='Hazır! Başlatabilirsin.';
-  }
+  if(playerCount>=2){document.getElementById('startBtn').style.display='block';document.getElementById('waitingMsg').textContent='Hazır! Başlatabilirsin.';}
 });
-
-socket.on('gameStarted',({players:pl,ball:b,mode,isRandom})=>{
+socket.on('gameStarted',({players:pl,ball:b,mode})=>{
   players=pl;ball=b;myMode=mode||'arena';searching=false;
   document.getElementById('lobby').style.display='none';
-  document.getElementById('gameArea').style.display='flex';
+  const ga=document.getElementById('gameArea');ga.style.display='flex';
   const badge=document.getElementById('myTeamBadge');
   badge.textContent=myTeam==='blue'?'🔵 Sen Mavi Takımdansın':'🔴 Sen Kırmızı Takımdansın';
   badge.style.color=myTeam==='blue'?'#5b8ef5':'#e74c3c';
-  // Host: ilk oyuncu
   isHost=Object.keys(pl)[0]===myId;
+  isMobile=detectMobile();
+  if(isMobile){
+    document.getElementById('mobileControls').style.display='block';
+    if(myMode==='soccer')document.getElementById('kickBtn').style.display='flex';
+  }
+  resizeCanvas();
   requestAnimationFrame(gameLoop);
 });
-
-socket.on('playerMoved',({id,x,y,angle,ammo:a})=>{
-  if(players[id]){players[id].x=x;players[id].y=y;players[id].angle=angle;players[id].ammo=a;}
-});
+socket.on('playerMoved',({id,x,y,angle,ammo:a})=>{if(players[id]){players[id].x=x;players[id].y=y;players[id].angle=angle;players[id].ammo=a;}});
 socket.on('bulletFired',(data)=>{bullets.push({...data,life:70,dead:false,r:5});});
 socket.on('playerDamaged',({id,hp})=>{if(players[id]){players[id].hp=hp;players[id].invincible=18;spawnParts(players[id].x,players[id].y,TEAM_COLORS[players[id].team]||'#fff',5,3);}});
 socket.on('playerDied',({id})=>{if(players[id]){players[id].dead=true;spawnParts(players[id].x,players[id].y,'#f5a623',16,5);}});
 socket.on('ballMoved',(b)=>{if(ball)Object.assign(ball,b);});
-socket.on('goalScored',({team,score:sc})=>{score=sc;goalLocked=false;goalText=(team==='blue'?'🔵':'🔴')+' GOL!';goalFlash=130;spawnParts(W/2,H/2,TEAM_COLORS[team],25,7);});
+socket.on('goalScored',({team,score:sc})=>{score=sc;goalLocked=false;goalText=(team==='blue'?'🔵':'🔴')+' GOL!';goalFlash=130;spawnParts(CW/2,CH/2,TEAM_COLORS[team],25,7);});
 socket.on('roundReset',({players:pl,ball:b,score:sc})=>{players=pl;ball=b;score=sc;goalLocked=false;bullets=[];});
 socket.on('newRound',({players:pl,score:sc,winner})=>{players=pl;score=sc;bullets=[];showOverlay((winner==='blue'?'🔵 Mavi':'🔴 Kırmızı')+' turu kazandı!','Skor: '+sc.blue+' — '+sc.red,false);});
 socket.on('gameOver',({winner,score:sc})=>{showOverlay('🏆 '+(winner==='blue'?'🔵 Mavi Takım':'🔴 Kırmızı Takım')+' Kazandı!','Skor: '+sc.blue+' — '+sc.red,true);});
 socket.on('playerLeft',({id})=>{delete players[id];});
 socket.on('roomFull',()=>alert('Oda dolu!'));
 
-// ---- LOBBY ----
-function findMatch(){
-  if(searching)return;
-  myMode=document.getElementById('modeSelect').value;
-  socket.emit('findMatch',{mode:myMode});
-}
-function cancelMatch(){
-  socket.emit('cancelMatch');
-}
-function joinRoom(){
-  const roomId=document.getElementById('roomInput').value.trim();
-  if(!roomId){alert('Oda kodu gir!');return;}
-  myMode=document.getElementById('modeSelect').value;
-  socket.emit('joinRoom',{roomId,mode:myMode});
-}
+function findMatch(){if(searching)return;myMode=document.getElementById('modeSelect').value;socket.emit('findMatch',{mode:myMode});}
+function cancelMatch(){socket.emit('cancelMatch');}
+function joinRoom(){const r=document.getElementById('roomInput').value.trim();if(!r){alert('Oda kodu gir!');return;}myMode=document.getElementById('modeSelect').value;socket.emit('joinRoom',{roomId:r,mode:myMode});}
 function startGame(){socket.emit('startGame');}
-function updateLobbyList(){
-  document.getElementById('playerList').innerHTML=Object.values(players).map(p=>
-    `<span style="color:${p.team==='blue'?'#5b8ef5':'#e74c3c'}">${p.team==='blue'?'🔵':'🔴'} ${p.label} ${p.id===myId?'(Sen)':''}</span>`
-  ).join('<br>');
-}
+function updateLobbyList(){document.getElementById('playerList').innerHTML=Object.values(players).map(p=>`<span style="color:${p.team==='blue'?'#5b8ef5':'#e74c3c'}">${p.team==='blue'?'🔵':'🔴'} ${p.label} ${p.id===myId?'(Sen)':''}</span>`).join('<br>');}
 
-// ---- UTILS ----
-function spawnParts(x,y,color,n,spd){
-  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(0.4+Math.random());
-  particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:28,maxLife:28,color,r:2+Math.random()*3});}
-}
+function spawnParts(x,y,color,n,spd){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(0.4+Math.random());particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:28,maxLife:28,color,r:2+Math.random()*3});}}
 
-// ---- GAME UPDATE ----
+function getFireInput(){return keys['c']||keys['ç']||fireBtnDown||kickBtnDown;}
+function getKickInput(){return keys['c']||keys['ç']||kickBtnDown;}
+
 function updateMyPlayer(){
   const me=players[myId];
   if(!me||me.dead)return;
-  const up=keys['w']||keys['arrowup'],dn=keys['s']||keys['arrowdown'];
-  const lt=keys['a']||keys['arrowleft'],rt=keys['d']||keys['arrowright'];
-  const fire=keys['c']||keys['ç'];
   let dx=0,dy=0,spd=2.5;
-  if(up)dy=-spd;if(dn)dy=spd;if(lt)dx=-spd;if(rt)dx=spd;
-  if(dx&&dy){dx*=0.707;dy*=0.707;}
-  me.x=Math.max(me.r+1,Math.min(W-me.r-1,me.x+dx));
-  me.y=Math.max(me.r+1,Math.min(H-me.r-1,me.y+dy));
+  if(isMobile&&joystickActive){dx=joystickDx*spd;dy=joystickDy*spd;}
+  else{
+    if(keys['w']||keys['arrowup'])dy=-spd;if(keys['s']||keys['arrowdown'])dy=spd;
+    if(keys['a']||keys['arrowleft'])dx=-spd;if(keys['d']||keys['arrowright'])dx=spd;
+    if(dx&&dy){dx*=0.707;dy*=0.707;}
+  }
+  me.x=Math.max(me.r+1,Math.min(CW-me.r-1,me.x+dx));
+  me.y=Math.max(me.r+1,Math.min(CH-me.r-1,me.y+dy));
 
-  // Nişan
   if(myMode==='soccer'&&ball){me.angle=Math.atan2(ball.y-me.y,ball.x-me.x);}
   else{let minD=Infinity;Object.values(players).forEach(p=>{if(p.id!==myId&&!p.dead&&p.team!==myTeam){const d=Math.hypot(p.x-me.x,p.y-me.y);if(d<minD){minD=d;me.angle=Math.atan2(p.y-me.y,p.x-me.x);}}});}
 
@@ -229,25 +271,22 @@ function updateMyPlayer(){
   if(shootCooldown>0)shootCooldown--;
   if(kickCooldown>0)kickCooldown--;
 
+  const fire=getFireInput();
   if(fire){
-    // Top vur
     if(myMode==='soccer'&&ball&&kickCooldown===0){
       const dist=Math.hypot(ball.x-me.x,ball.y-me.y);
       if(dist<me.r+ball.r+16){
         const a=Math.atan2(ball.y-me.y,ball.x-me.x);
         ball.vx=Math.cos(a)*10.5;ball.vy=Math.sin(a)*10.5;
-        kickCooldown=20;socket.emit('ballUpdate',{...ball});
-        spawnParts(ball.x,ball.y,'#fff',5,3);
+        kickCooldown=20;socket.emit('ballUpdate',{...ball});spawnParts(ball.x,ball.y,'#fff',5,3);
       }
     }
-    // Ateş
     if(shootCooldown===0&&reloadTimer===0&&ammo>0){
       const a=me.angle+(Math.random()-0.5)*0.1;
       const bData={x:me.x+Math.cos(a)*(me.r+2),y:me.y+Math.sin(a)*(me.r+2),vx:Math.cos(a)*7.5,vy:Math.sin(a)*7.5,color:TEAM_COLORS[myTeam],team:myTeam,dmg:20};
       bullets.push({...bData,shooterId:myId,life:70,dead:false,r:5});
       socket.emit('shoot',bData);
-      ammo--;shootCooldown=14;
-      if(ammo<=0)reloadTimer=45;
+      ammo--;shootCooldown=14;if(ammo<=0)reloadTimer=45;
     }
   }
   socket.emit('playerMove',{x:me.x,y:me.y,angle:me.angle,ammo,reloadTimer});
@@ -256,22 +295,16 @@ function updateMyPlayer(){
 function updateBullets(){
   for(let b of bullets){
     b.x+=b.vx;b.y+=b.vy;b.life--;
-    if(b.x<0||b.x>W||b.y<0||b.y>H||b.life<=0){b.dead=true;continue;}
+    if(b.x<0||b.x>CW||b.y<0||b.y>CH||b.life<=0){b.dead=true;continue;}
     if(b.shooterId===myId){
       Object.values(players).forEach(p=>{
         if(p.id===myId||p.dead||p.team===myTeam||(p.invincible||0)>0)return;
-        if(Math.hypot(b.x-p.x,b.y-p.y)<p.r+b.r){
-          socket.emit('playerHit',{targetId:p.id,dmg:b.dmg});
-          p.invincible=18;b.dead=true;spawnParts(b.x,b.y,b.color,6,4);
-        }
+        if(Math.hypot(b.x-p.x,b.y-p.y)<p.r+b.r){socket.emit('playerHit',{targetId:p.id,dmg:b.dmg});p.invincible=18;b.dead=true;spawnParts(b.x,b.y,b.color,6,4);}
       });
     } else {
       const me=players[myId];
-      if(me&&!me.dead&&(me.invincible||0)===0&&b.team!==myTeam){
-        if(Math.hypot(b.x-me.x,b.y-me.y)<me.r+b.r){
-          socket.emit('playerHit',{targetId:myId,dmg:b.dmg});
-          me.invincible=18;b.dead=true;
-        }
+      if(me&&!me.dead&&(me.invincible||0)===0&&b.team!==myTeam&&Math.hypot(b.x-me.x,b.y-me.y)<me.r+b.r){
+        socket.emit('playerHit',{targetId:myId,dmg:b.dmg});me.invincible=18;b.dead=true;
       }
     }
   }
@@ -280,17 +313,16 @@ function updateBullets(){
 
 function updateBall(){
   if(!ball||goalLocked||!isHost)return;
-  ball.x+=ball.vx;ball.y+=ball.vy;
-  ball.vx*=0.988;ball.vy*=0.988;
+  ball.x+=ball.vx;ball.y+=ball.vy;ball.vx*=0.988;ball.vy*=0.988;
   if(Math.abs(ball.vx)<0.04)ball.vx=0;if(Math.abs(ball.vy)<0.04)ball.vy=0;
   if(!goalLocked){
     if(ball.x-ball.r<=GOAL_W&&ball.y>=GOAL_TOP&&ball.y<=GOAL_BOT){goalLocked=true;socket.emit('goalScored',{team:'red'});return;}
-    if(ball.x+ball.r>=W-GOAL_W&&ball.y>=GOAL_TOP&&ball.y<=GOAL_BOT){goalLocked=true;socket.emit('goalScored',{team:'blue'});return;}
+    if(ball.x+ball.r>=CW-GOAL_W&&ball.y>=GOAL_TOP&&ball.y<=GOAL_BOT){goalLocked=true;socket.emit('goalScored',{team:'blue'});return;}
   }
   if(ball.x-ball.r<=0){if(ball.y<GOAL_TOP||ball.y>GOAL_BOT){ball.x=ball.r+1;ball.vx=Math.abs(ball.vx);}}
-  if(ball.x+ball.r>=W){if(ball.y<GOAL_TOP||ball.y>GOAL_BOT){ball.x=W-ball.r-1;ball.vx=-Math.abs(ball.vx);}}
+  if(ball.x+ball.r>=CW){if(ball.y<GOAL_TOP||ball.y>GOAL_BOT){ball.x=CW-ball.r-1;ball.vx=-Math.abs(ball.vx);}}
   if(ball.y-ball.r<=0){ball.y=ball.r+1;ball.vy=Math.abs(ball.vy);}
-  if(ball.y+ball.r>=H){ball.y=H-ball.r-1;ball.vy=-Math.abs(ball.vy);}
+  if(ball.y+ball.r>=CH){ball.y=CH-ball.r-1;ball.vy=-Math.abs(ball.vy);}
   Object.values(players).forEach(p=>{
     if(p.dead)return;
     const dist=Math.hypot(ball.x-p.x,ball.y-p.y);
@@ -304,30 +336,23 @@ function updateBall(){
   socket.emit('ballUpdate',{...ball});
 }
 
-function updateParticles(){
-  for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vx*=0.88;p.vy*=0.88;p.life--;}
-  particles=particles.filter(p=>p.life>0);
-}
+function updateParticles(){for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vx*=0.88;p.vy*=0.88;p.life--;}particles=particles.filter(p=>p.life>0);}
 
-// ---- DRAW ----
 function drawArenaMap(){
-  ctx.fillStyle='#2d3250';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#2d3250';ctx.fillRect(0,0,CW,CH);
   for(let x=0;x<15;x++)for(let y=0;y<11;y++)if((x+y)%2===0){ctx.fillStyle='rgba(255,255,255,0.025)';ctx.fillRect(x*40,y*40,40,40);}
   [[5,1],[9,1],[5,8],[9,8],[2,3],[2,7],[12,3],[12,7],[6,4],[8,4],[6,6],[8,6]].forEach(([x,y])=>{
-    ctx.fillStyle='#4a5180';ctx.fillRect(x*40,y*40,40,40);
-    ctx.fillStyle='#5c6499';ctx.fillRect(x*40,y*40,40,4);ctx.fillRect(x*40,y*40,4,40);
+    ctx.fillStyle='#4a5180';ctx.fillRect(x*40,y*40,40,40);ctx.fillStyle='#5c6499';ctx.fillRect(x*40,y*40,40,4);ctx.fillRect(x*40,y*40,4,40);
   });
 }
 function drawSoccerMap(){
-  for(let x=0;x<8;x++){ctx.fillStyle=x%2===0?'#2d5a27':'#335f2c';ctx.fillRect(x*(W/8),0,W/8,H);}
+  for(let x=0;x<8;x++){ctx.fillStyle=x%2===0?'#2d5a27':'#335f2c';ctx.fillRect(x*(CW/8),0,CW/8,CH);}
   ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=2;
-  ctx.strokeRect(2,2,W-4,H-4);
-  ctx.beginPath();ctx.moveTo(W/2,2);ctx.lineTo(W/2,H-2);ctx.stroke();
-  ctx.beginPath();ctx.arc(W/2,H/2,55,0,Math.PI*2);ctx.stroke();
+  ctx.strokeRect(2,2,CW-4,CH-4);ctx.beginPath();ctx.moveTo(CW/2,2);ctx.lineTo(CW/2,CH-2);ctx.stroke();
+  ctx.beginPath();ctx.arc(CW/2,CH/2,55,0,Math.PI*2);ctx.stroke();
   ctx.fillStyle='rgba(231,76,60,0.3)';ctx.fillRect(0,GOAL_TOP,GOAL_W,GOAL_H);
-  ctx.fillStyle='rgba(91,142,245,0.3)';ctx.fillRect(W-GOAL_W,GOAL_TOP,GOAL_W,GOAL_H);
-  ctx.strokeStyle='#fff';ctx.lineWidth=3;
-  ctx.strokeRect(0,GOAL_TOP,GOAL_W,GOAL_H);ctx.strokeRect(W-GOAL_W,GOAL_TOP,GOAL_W,GOAL_H);
+  ctx.fillStyle='rgba(91,142,245,0.3)';ctx.fillRect(CW-GOAL_W,GOAL_TOP,GOAL_W,GOAL_H);
+  ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.strokeRect(0,GOAL_TOP,GOAL_W,GOAL_H);ctx.strokeRect(CW-GOAL_W,GOAL_TOP,GOAL_W,GOAL_H);
 }
 function drawBall(){
   if(!ball)return;
@@ -340,8 +365,7 @@ function drawBall(){
 function drawPlayers(){
   Object.values(players).forEach(p=>{
     if(p.dead)return;
-    const isMe=p.id===myId;
-    const color=TEAM_COLORS[p.team]||'#fff';
+    const isMe=p.id===myId,color=TEAM_COLORS[p.team]||'#fff';
     if((p.invincible||0)>0&&Math.floor((p.invincible||0)/3)%2===0)return;
     ctx.save();ctx.translate(p.x,p.y);
     ctx.beginPath();ctx.arc(0,0,16,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fill();
@@ -357,9 +381,9 @@ function drawBullets(){for(let b of bullets){ctx.save();ctx.beginPath();ctx.arc(
 function drawParticles(){for(let p of particles){ctx.save();ctx.globalAlpha=p.life/p.maxLife;ctx.beginPath();ctx.arc(p.x,p.y,p.r*(p.life/p.maxLife),0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();}}
 function drawGoalFlash(){
   if(goalFlash<=0)return;
-  ctx.save();ctx.globalAlpha=Math.min(goalFlash/50,0.6);ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.globalAlpha=Math.min(goalFlash/50,0.6);ctx.fillStyle='#000';ctx.fillRect(0,0,CW,CH);
   ctx.globalAlpha=Math.min(goalFlash/40,1);ctx.font='bold 46px Arial';ctx.fillStyle='#f5a623';ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(goalText,W/2,H/2);ctx.restore();goalFlash--;
+  ctx.fillText(goalText,CW/2,CH/2);ctx.restore();goalFlash--;
 }
 function updateHUD(){
   function rb(id,team){
@@ -379,14 +403,11 @@ function updateHUD(){
 }
 
 function gameLoop(){
-  updateMyPlayer();
-  if(myMode==='soccer')updateBall();
+  updateMyPlayer();if(myMode==='soccer')updateBall();
   updateBullets();updateParticles();updateHUD();
   if(myMode==='soccer')drawSoccerMap();else drawArenaMap();
-  drawParticles();drawBullets();
-  if(myMode==='soccer')drawBall();
-  drawPlayers();
-  if(myMode==='soccer')drawGoalFlash();
+  drawParticles();drawBullets();if(myMode==='soccer')drawBall();
+  drawPlayers();if(myMode==='soccer')drawGoalFlash();
   requestAnimationFrame(gameLoop);
 }
 
@@ -394,10 +415,7 @@ function showOverlay(title,desc,isFinal){
   document.getElementById('ovTitle').textContent=title;
   document.getElementById('ovDesc').textContent=desc;
   const btns=document.getElementById('ovBtns');btns.innerHTML='';
-  if(isFinal){
-    const b1=document.createElement('button');b1.className='obtn';b1.textContent='Tekrar Oyna';
-    b1.onclick=()=>location.reload();btns.appendChild(b1);
-  }
+  if(isFinal){const b1=document.createElement('button');b1.className='obtn';b1.textContent='Tekrar Oyna';b1.onclick=()=>location.reload();btns.appendChild(b1);}
   document.getElementById('overlay').style.display='block';
 }
 
@@ -406,3 +424,4 @@ document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 </script>
 </body>
 </html>
+    
