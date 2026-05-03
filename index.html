@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brawl Arena Multiplayer</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#1a1a2e;font-family:Arial,sans-serif;display:flex;justify-content:center;min-height:100vh;}
+#root{width:620px;display:flex;flex-direction:column;align-items:center;padding:10px 0;}
+
+/* LOBBY */
+#lobby{width:100%;display:flex;flex-direction:column;align-items:center;padding:30px 20px;gap:14px;}
+#lobby h1{color:#f5a623;font-size:28px;}
+#lobby p{color:#888;font-size:13px;}
+.section{background:#2d3250;border-radius:10px;padding:18px;width:320px;}
+.section h3{color:#fff;font-size:14px;margin-bottom:10px;}
+input{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:14px;margin-bottom:8px;}
+input:focus{outline:none;border-color:#f5a623;}
+select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444;background:#1a1a2e;color:#fff;font-size:14px;margin-bottom:8px;}
+.btn{width:100%;padding:10px;border-radius:8px;border:none;background:#f5a623;color:#000;font-size:14px;font-weight:bold;cursor:pointer;}
+.btn:hover{background:#ffbe4d;}
+.btn2{background:#3a4070;color:#fff;}
+.btn2:hover{background:#4a5090;}
+#status{color:#4caf50;font-size:12px;text-align:center;min-height:18px;}
+#playerList{color:#aaa;font-size:12px;line-height:1.8;}
+
+/* GAME */
+#gameArea{display:none;flex-direction:column;align-items:center;width:100%;}
+#hud{display:flex;justify-content:space-between;align-items:center;width:600px;margin-bottom:5px;color:#fff;font-size:12px;}
+.thud{display:flex;flex-direction:column;gap:2px;}
+.mbars{display:flex;flex-direction:column;gap:2px;}
+.mbar-row{display:flex;align-items:center;gap:3px;}
+.bar-bg{width:65px;height:6px;background:#333;border-radius:3px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:3px;transition:width 0.1s;}
+#scoreboard{text-align:center;color:#f5a623;font-size:18px;font-weight:bold;}
+#gameCanvas{border:2px solid #444;border-radius:8px;display:block;cursor:crosshair;}
+#ctrl{margin-top:5px;color:#555;font-size:11px;text-align:center;}
+#overlay{position:absolute;top:48px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.93);border-radius:12px;padding:20px 32px;text-align:center;color:#fff;z-index:10;min-width:230px;display:none;}
+#overlay h2{font-size:21px;font-weight:bold;margin-bottom:5px;}
+#overlay p{color:#aaa;font-size:12px;margin-bottom:13px;line-height:1.8;}
+.obtn{background:#f5a623;color:#000;border:none;border-radius:8px;padding:7px 18px;font-size:13px;font-weight:bold;cursor:pointer;margin:3px;}
+.obtn:hover{background:#ffbe4d;}
+.obtn2{background:#444;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:13px;cursor:pointer;margin:3px;}
+.obtn2:hover{background:#555;}
+#myTeamBadge{font-size:13px;font-weight:bold;text-align:center;margin-bottom:4px;}
+</style>
+</head>
+<body>
+<div id="root">
+  <!-- LOBBY -->
+  <div id="lobby">
+    <h1>⚡ Brawl Arena</h1>
+    <p>Arkadaşınla aynı oda kodunu kullan!</p>
+
+    <div class="section">
+      <h3>🎮 Oyun Modu</h3>
+      <select id="modeSelect">
+        <option value="arena">⚔️ Arena (2 tur kazanan şampiyon)</option>
+        <option value="soccer">⚽ Futbol (3 gol kazandırır)</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <h3>🚪 Odaya Katıl</h3>
+      <input id="roomInput" placeholder="Oda kodu (örn: oda123)" maxlength="20"/>
+      <button class="btn" onclick="joinRoom()">Odaya Katıl / Oluştur</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="section" id="waitingSection" style="display:none;">
+      <h3>👥 Odadaki Oyuncular</h3>
+      <div id="playerList"></div>
+      <br>
+      <button class="btn" id="startBtn" onclick="startGame()" style="display:none;">Oyunu Başlat</button>
+      <p style="color:#888;font-size:11px;margin-top:8px;" id="waitingMsg">Diğer oyuncuları bekliyor...</p>
+    </div>
+  </div>
+
+  <!-- GAME -->
+  <div id="gameArea">
+    <div id="myTeamBadge"></div>
+    <div id="hud">
+      <div class="thud"><span style="font-size:13px;font-weight:bold;color:#5b8ef5">🔵 Mavi</span><div class="mbars" id="bluebars"></div></div>
+      <div id="scoreboard">0 — 0</div>
+      <div class="thud" style="align-items:flex-end"><span style="font-size:13px;font-weight:bold;color:#e74c3c">🔴 Kırmızı</span><div class="mbars" id="redbars"></div></div>
+    </div>
+    <canvas id="gameCanvas" width="600" height="420"></canvas>
+    <div id="ctrl">WASD / Ok tuşları hareket · C / Ç ateş & top at</div>
+    <div id="overlay">
+      <h2 id="ovTitle"></h2>
+      <p id="ovDesc"></p>
+      <div id="ovBtns"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W=600,H=420;
+
+let myId=null, myTeam=null, myRoomId=null, myMode=null;
+let players={}, ball=null, bullets=[], particles=[];
+let keys={};
+let score={blue:0,red:0};
+let goalFlash=0,goalText='';
+let isHost=false;
+let goalLocked=false;
+
+// Kale
+const GOAL_H=110,GOAL_TOP=(H-GOAL_H)/2,GOAL_BOT=(H+GOAL_H)/2,GOAL_W=20;
+
+// ---- SOCKET EVENTS ----
+socket.on('joinedRoom',({playerId,team,roomId})=>{
+  myId=playerId;myTeam=team;myRoomId=roomId;
+  document.getElementById('status').textContent=`✅ Odaya katıldın! Takım: ${team==='blue'?'🔵 Mavi':'🔴 Kırmızı'}`;
+  document.getElementById('waitingSection').style.display='block';
+  // İlk katılan host
+  if(Object.keys(players).length===0)isHost=true;
+});
+
+socket.on('roomUpdate',({players:pl,score:sc,mode})=>{
+  players=pl;score=sc;if(mode)myMode=mode;
+  updateLobbyList();
+  if(Object.keys(pl).length>=2){
+    document.getElementById('startBtn').style.display='block';
+    document.getElementById('waitingMsg').textContent='Hazır! Başlatabilirsin.';
+  }
+});
+
+socket.on('gameStarted',({players:pl,ball:b,mode})=>{
+  players=pl;ball=b;myMode=mode;
+  document.getElementById('lobby').style.display='none';
+  document.getElementById('gameArea').style.display='flex';
+  const badge=document.getElementById('myTeamBadge');
+  badge.textContent=myTeam==='blue'?'🔵 Sen Mavi Takımdansın':'🔴 Sen Kırmızı Takımdansın';
+  badge.style.color=myTeam==='blue'?'#5b8ef5':'#e74c3c';
+  requestAnimationFrame(gameLoop);
+});
+
+socket.on('playerMoved',({id,x,y,angle,ammo})=>{
+  if(players[id]){players[id].x=x;players[id].y=y;players[id].angle=angle;players[id].ammo=ammo;}
+});
+
+socket.on('bulletFired',(data)=>{
+  bullets.push({...data,life:70,dead:false,r:5});
+});
+
+socket.on('playerDamaged',({id,hp})=>{
+  if(players[id]){players[id].hp=hp;players[id].invincible=18;spawnParts(players[id].x,players[id].y,players[id].color||'#fff',6,3);}
+});
+
+socket.on('playerDied',({id})=>{
+  if(players[id]){players[id].dead=true;spawnParts(players[id].x,players[id].y,'#f5a623',16,5);}
+});
+
+socket.on('ballMoved',(b)=>{if(ball)Object.assign(ball,b);});
+
+socket.on('goalScored',({team,score:sc})=>{
+  score=sc;goalLocked=false;
+  goalText=(team==='blue'?'🔵':'🔴')+' GOL!';goalFlash=130;
+  spawnParts(W/2,H/2,team==='blue'?'#5b8ef5':'#e74c3c',25,7);
+});
+
+socket.on('roundReset',({players:pl,ball:b,score:sc})=>{
+  players=pl;ball=b;score=sc;goalLocked=false;bullets=[];
+});
+
+socket.on('newRound',({players:pl,score:sc,winner})=>{
+  players=pl;score=sc;bullets=[];
+  showOverlay((winner==='blue'?'🔵 Mavi':'🔴 Kırmızı')+' turu kazandı!','Skor: '+sc.blue+' — '+sc.red,false);
+});
+
+socket.on('gameOver',({winner,score:sc})=>{
+  const w=winner==='blue'?'🔵 Mavi Takım':'🔴 Kırmızı Takım';
+  showOverlay('🏆 '+w+' Kazandı!','Skor: '+sc.blue+' — '+sc.red,true);
+});
+
+socket.on('playerLeft',({id})=>{delete players[id];});
+socket.on('roomFull',()=>alert('Oda dolu (max 6 oyuncu)!'));
+
+// ---- LOBBY ----
+function joinRoom(){
+  const roomId=document.getElementById('roomInput').value.trim();
+  const mode=document.getElementById('modeSelect').value;
+  if(!roomId){alert('Oda kodu gir!');return;}
+  myMode=mode;
+  socket.emit('joinRoom',{roomId,mode});
+}
+
+function startGame(){socket.emit('startGame');}
+
+function updateLobbyList(){
+  const el=document.getElementById('playerList');
+  el.innerHTML=Object.values(players).map(p=>
+    `<span style="color:${p.team==='blue'?'#5b8ef5':'#e74c3c'}">${p.team==='blue'?'🔵':'🔴'} ${p.label} ${p.id===myId?'(Sen)':''}</span>`
+  ).join('<br>');
+}
+
+// ---- UTILS ----
+function spawnParts(x,y,color,n,spd){
+  for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(0.4+Math.random());
+  particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:28,maxLife:28,color,r:2+Math.random()*3});}
+}
+
+function getMyPlayer(){return players[myId];}
+
+// Kontrol tuşları
+function getMyKeys(){
+  // Her iki takım da WASD veya Ok kullanabilir - kendi takımına göre
+  return {
+    up: keys['w']||keys['arrowup'],
+    down: keys['s']||keys['arrowdown'],
+    left: keys['a']||keys['arrowleft'],
+    right: keys['d']||keys['arrowright'],
+    fire: keys['c']||keys['ç'],
+  };
+}
+
+// ---- GAME UPDATE ----
+let lastShootTime=0, shootCooldown=0, ammo=5, reloadTimer=0, kickCooldown=0;
+
+function updateMyPlayer(){
+  const me=getMyPlayer();
+  if(!me||me.dead)return;
+  const k=getMyKeys();
+  let dx=0,dy=0,spd=2.5;
+  if(k.up)dy=-spd;if(k.down)dy=spd;
+  if(k.left)dx=-spd;if(k.right)dx=spd;
+  if(dx&&dy){dx*=0.707;dy*=0.707;}
+
+  // Basit sınır kontrolü (sunucu da kontrol eder)
+  me.x=Math.max(me.r+1,Math.min(W-me.r-1,me.x+dx));
+  me.y=Math.max(me.r+1,Math.min(H-me.r-1,me.y+dy));
+
+  // Nişan: futbolda topa, arenada düşmana
+  let aimTarget=null;
+  if(myMode==='soccer'&&ball){aimTarget=ball;}
+  else{
+    let minD=Infinity;
+    Object.values(players).forEach(p=>{
+      if(p.id!==myId&&!p.dead&&p.team!==myTeam){
+        const d=Math.hypot(p.x-me.x,p.y-me.y);
+        if(d<minD){minD=d;aimTarget=p;}
+      }
+    });
+  }
+  if(aimTarget)me.angle=Math.atan2(aimTarget.y-me.y,aimTarget.x-me.x);
+
+  // Reload
+  if(reloadTimer>0){reloadTimer--;if(reloadTimer<=0)ammo=5;}
+  if(shootCooldown>0)shootCooldown--;
+  if(kickCooldown>0)kickCooldown--;
+
+  // Ateş / top vur
+  if(k.fire){
+    // Top vur
+    if(myMode==='soccer'&&ball&&kickCooldown===0){
+      const dist=Math.hypot(ball.x-me.x,ball.y-me.y);
+      if(dist<me.r+ball.r+16){
+        const a=Math.atan2(ball.y-me.y,ball.x-me.x);
+        ball.vx=Math.cos(a)*10.5;ball.vy=Math.sin(a)*10.5;
+        kickCooldown=20;
+        socket.emit('ballUpdate',{...ball});
+        spawnParts(ball.x,ball.y,'#fff',5,3);
+      }
+    }
+    // Ateş
+    if(shootCooldown===0&&reloadTimer===0&&ammo>0){
+      const bx=me.x+Math.cos(me.angle)*(me.r+2);
+      const by=me.y+Math.sin(me.angle)*(me.r+2);
+      const a=me.angle+(Math.random()-0.5)*0.1;
+      const bData={x:bx,y:by,vx:Math.cos(a)*7.5,vy:Math.sin(a)*7.5,color:myTeam==='blue'?'#5b8ef5':'#e74c3c',team:myTeam,dmg:20};
+      bullets.push({...bData,life:70,dead:false,r:5});
+      socket.emit('shoot',bData);
+      ammo--;shootCooldown=14;
+      if(ammo<=0)reloadTimer=45;
+    }
+  }
+
+  // Sunucuya pozisyon gönder (her frame)
+  socket.emit('playerMove',{x:me.x,y:me.y,angle:me.angle,ammo,reloadTimer});
+}
+
+function updateBullets(){
+  for(let b of bullets){
+    b.x+=b.vx;b.y+=b.vy;b.life--;
+    if(b.x<0||b.x>W||b.y<0||b.y>H||b.life<=0){b.dead=true;continue;}
+    // Sadece benim mermilerim hasar verir (çakışmayı önlemek için)
+    if(b.shooterId===myId||(!b.shooterId&&b.team===myTeam)){
+      // Kendi mermim - düşmanlara vur
+    } else {
+      // Başkasının mermisi - bana vurabilir
+      const me=getMyPlayer();
+      if(me&&!me.dead&&me.invincible===0&&b.team!==myTeam){
+        if(Math.hypot(b.x-me.x,b.y-me.y)<me.r+b.r){
+          socket.emit('playerHit',{targetId:myId,dmg:b.dmg});
+          me.invincible=18;b.dead=true;
+        }
+      }
+    }
+    // Tüm düşmanlara vur (kendi mermim)
+    if(b.shooterId===myId){
+      Object.values(players).forEach(p=>{
+        if(p.id===myId||p.dead||p.team===myTeam||(p.invincible||0)>0)return;
+        if(Math.hypot(b.x-p.x,b.y-p.y)<p.r+b.r){
+          socket.emit('playerHit',{targetId:p.id,dmg:b.dmg});
+          p.invincible=18;b.dead=true;
+          spawnParts(b.x,b.y,b.color,6,4);
+        }
+      });
+    }
+  }
+  bullets=bullets.filter(b=>!b.dead);
+}
+
+function updateBall(){
+  if(!ball||goalLocked)return;
+  // Host topu günceller ve sunucuya gönderir
+  if(!isHost)return;
+  ball.x+=ball.vx;ball.y+=ball.vy;
+  ball.vx*=0.988;ball.vy*=0.988;
+  if(Math.abs(ball.vx)<0.04)ball.vx=0;
+  if(Math.abs(ball.vy)<0.04)ball.vy=0;
+
+  // Gol kontrolü
+  if(!goalLocked){
+    if(ball.x-ball.r<=GOAL_W&&ball.y>=GOAL_TOP&&ball.y<=GOAL_BOT){
+      goalLocked=true;socket.emit('goalScored',{team:'red'});return;
+    }
+    if(ball.x+ball.r>=W-GOAL_W&&ball.y>=GOAL_TOP&&ball.y<=GOAL_BOT){
+      goalLocked=true;socket.emit('goalScored',{team:'blue'});return;
+    }
+  }
+
+  if(ball.x-ball.r<=0){if(ball.y<GOAL_TOP||ball.y>GOAL_BOT){ball.x=ball.r+1;ball.vx=Math.abs(ball.vx);}}
+  if(ball.x+ball.r>=W){if(ball.y<GOAL_TOP||ball.y>GOAL_BOT){ball.x=W-ball.r-1;ball.vx=-Math.abs(ball.vx);}}
+  if(ball.y-ball.r<=0){ball.y=ball.r+1;ball.vy=Math.abs(ball.vy);}
+  if(ball.y+ball.r>=H){ball.y=H-ball.r-1;ball.vy=-Math.abs(ball.vy);}
+
+  Object.values(players).forEach(p=>{
+    if(p.dead)return;
+    const dist=Math.hypot(ball.x-p.x,ball.y-p.y);
+    if(dist<ball.r+p.r&&dist>0){
+      const a=Math.atan2(ball.y-p.y,ball.x-p.x);
+      ball.x=p.x+Math.cos(a)*(ball.r+p.r+1);
+      ball.y=p.y+Math.sin(a)*(ball.r+p.r+1);
+      const spd=Math.max(Math.sqrt(ball.vx*ball.vx+ball.vy*ball.vy),2.5);
+      ball.vx=Math.cos(a)*spd;ball.vy=Math.sin(a)*spd;
+    }
+  });
+  socket.emit('ballUpdate',{...ball});
+}
+
+function updateParticles(){
+  for(let p of particles){p.x+=p.vx;p.y+=p.vy;p.vx*=0.88;p.vy*=0.88;p.life--;}
+  particles=particles.filter(p=>p.life>0);
+}
+
+// ---- DRAW ----
+const TEAM_COLORS={blue:'#5b8ef5',red:'#e74c3c'};
+
+function drawArenaMap(){
+  ctx.fillStyle='#2d3250';ctx.fillRect(0,0,W,H);
+  for(let x=0;x<15;x++)for(let y=0;y<11;y++)if((x+y)%2===0){ctx.fillStyle='rgba(255,255,255,0.025)';ctx.fillRect(x*40,y*40,40,40);}
+  // Birkaç duvar
+  [[5,1],[9,1],[5,8],[9,8],[2,3],[2,7],[12,3],[12,7],[6,4],[8,4],[6,6],[8,6]].forEach(([x,y])=>{
+    ctx.fillStyle='#4a5180';ctx.fillRect(x*40,y*40,40,40);
+    ctx.fillStyle='#5c6499';ctx.fillRect(x*40,y*40,40,4);ctx.fillRect(x*40,y*40,4,40);
+  });
+}
+
+function drawSoccerMap(){
+  for(let x=0;x<8;x++){ctx.fillStyle=x%2===0?'#2d5a27':'#335f2c';ctx.fillRect(x*(W/8),0,W/8,H);}
+  ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=2;
+  ctx.strokeRect(2,2,W-4,H-4);
+  ctx.beginPath();ctx.moveTo(W/2,2);ctx.lineTo(W/2,H-2);ctx.stroke();
+  ctx.beginPath();ctx.arc(W/2,H/2,55,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='rgba(231,76,60,0.3)';ctx.fillRect(0,GOAL_TOP,GOAL_W,GOAL_H);
+  ctx.fillStyle='rgba(91,142,245,0.3)';ctx.fillRect(W-GOAL_W,GOAL_TOP,GOAL_W,GOAL_H);
+  ctx.strokeStyle='#fff';ctx.lineWidth=3;
+  ctx.strokeRect(0,GOAL_TOP,GOAL_W,GOAL_H);ctx.strokeRect(W-GOAL_W,GOAL_TOP,GOAL_W,GOAL_H);
+}
+
+function drawBall(){
+  if(!ball)return;
+  ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=6;
+  ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
+  ctx.shadowBlur=0;ctx.strokeStyle='#222';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.beginPath();ctx.arc(ball.x-3,ball.y-3,4,0,Math.PI*2);ctx.fillStyle='#333';ctx.fill();
+  ctx.restore();
+}
+
+function drawPlayers(){
+  Object.values(players).forEach(p=>{
+    if(p.dead)return;
+    const isMe=p.id===myId;
+    const color=TEAM_COLORS[p.team]||'#fff';
+    if((p.invincible||0)>0&&Math.floor((p.invincible||0)/3)%2===0)return;
+    ctx.save();ctx.translate(p.x,p.y);
+    ctx.beginPath();ctx.arc(0,0,13+3,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fill();
+    ctx.beginPath();ctx.arc(0,0,13,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+    if(isMe){ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=2.5;ctx.stroke();}
+    ctx.beginPath();ctx.arc(-3,-3,4,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.22)';ctx.fill();
+    ctx.save();ctx.rotate(p.angle||0);ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(7,-3,12,6,3);ctx.fill();ctx.restore();
+    ctx.font='9px Arial';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText((p.label||'?')+(isMe?' ◀':''),0,-20);
+    ctx.restore();
+  });
+}
+
+function drawBullets(){for(let b of bullets){ctx.save();ctx.beginPath();ctx.arc(b.x,b.y,5,0,Math.PI*2);ctx.fillStyle=b.color||'#fff';ctx.fill();ctx.restore();}}
+function drawParticles(){for(let p of particles){ctx.save();ctx.globalAlpha=p.life/p.maxLife;ctx.beginPath();ctx.arc(p.x,p.y,p.r*(p.life/p.maxLife),0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();}}
+
+function drawGoalFlash(){
+  if(goalFlash<=0)return;
+  ctx.save();ctx.globalAlpha=Math.min(goalFlash/50,0.6);ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=Math.min(goalFlash/40,1);ctx.font='bold 46px Arial';ctx.fillStyle='#f5a623';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(goalText,W/2,H/2);ctx.restore();goalFlash--;
+}
+
+function updateHUD(){
+  function rb(id,team){
+    const el=document.getElementById(id);el.innerHTML='';
+    Object.values(players).filter(p=>p.team===team).forEach(p=>{
+      const row=document.createElement('div');row.className='mbar-row';
+      const lbl=document.createElement('span');lbl.textContent=p.id===myId?'👤':'👥';lbl.style.width='16px';
+      const bg=document.createElement('div');bg.className='bar-bg';
+      const fill=document.createElement('div');fill.className='bar-fill';
+      const pct=p.dead?0:Math.max(0,(p.hp||100)/100*100);
+      fill.style.width=pct+'%';fill.style.background=pct>50?TEAM_COLORS[team]:pct>25?'#f5a623':'#e74c3c';
+      bg.appendChild(fill);row.appendChild(lbl);row.appendChild(bg);el.appendChild(row);
+    });
+  }
+  rb('bluebars','blue');rb('redbars','red');
+  const isSoccer=myMode==='soccer';
+  document.getElementById('scoreboard').innerHTML=isSoccer?'⚽ '+score.blue+' — '+score.red+' ⚽':'🏆 '+score.blue+' — '+score.red;
+}
+
+function gameLoop(){
+  updateMyPlayer();
+  if(myMode==='soccer')updateBall();
+  updateBullets();updateParticles();updateHUD();
+  if(myMode==='soccer')drawSoccerMap();else drawArenaMap();
+  drawParticles();drawBullets();
+  if(myMode==='soccer')drawBall();
+  drawPlayers();
+  if(myMode==='soccer')drawGoalFlash();
+  requestAnimationFrame(gameLoop);
+}
+
+function showOverlay(title,desc,isFinal){
+  document.getElementById('ovTitle').textContent=title;
+  document.getElementById('ovDesc').textContent=desc;
+  const btns=document.getElementById('ovBtns');btns.innerHTML='';
+  if(isFinal){
+    const b1=document.createElement('button');b1.className='obtn';b1.textContent='Tekrar Oyna';
+    b1.onclick=()=>{location.reload();};btns.appendChild(b1);
+  }
+  document.getElementById('overlay').style.display='block';
+}
+
+document.addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))e.preventDefault();
+});
+document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+</script>
+</body>
+</html>
