@@ -12,12 +12,15 @@ app.use(express.static(path.join(__dirname)));
 const rooms = {};
 let matchmakingQueue = [];
 
+// Oyun alanı 600x420, spawn noktaları kesinlikle içeride
 function getSpawnPos(team, idx, mode) {
   const isSoccer = mode && mode.includes('soccer');
-  const abl = [{x:30,y:80},{x:30,y:210},{x:30,y:340}];
-  const ard = [{x:570,y:80},{x:570,y:210},{x:570,y:340}];
-  const fbl = [{x:100,y:110},{x:100,y:210},{x:100,y:310}];
-  const frd = [{x:500,y:110},{x:500,y:210},{x:500,y:310}];
+  // Arena spawn: sol/sağ ortası, duvarlardan uzak
+  const abl = [{x:50,y:100},{x:50,y:210},{x:50,y:320}];
+  const ard = [{x:550,y:100},{x:550,y:210},{x:550,y:320}];
+  // Futbol spawn: alan içi, kale önü değil
+  const fbl = [{x:120,y:130},{x:120,y:210},{x:120,y:290}];
+  const frd = [{x:480,y:130},{x:480,y:210},{x:480,y:290}];
   const list = isSoccer ? (team==='blue'?fbl:frd) : (team==='blue'?abl:ard);
   return list[idx % list.length];
 }
@@ -40,9 +43,12 @@ function addPlayerToRoom(socket, room, mode) {
   const idx = teamPlayers.length;
   const spawn = getSpawnPos(team, idx, mode || room.mode);
 
+  console.log(`Spawn: takım=${team} idx=${idx} x=${spawn.x} y=${spawn.y} mod=${mode||room.mode}`);
+
   room.players[socket.id] = {
     id: socket.id, team,
     x: spawn.x, y: spawn.y,
+    r: 13,
     hp: 100, maxHp: 100,
     angle: team==='blue'?0:Math.PI,
     dead: false,
@@ -80,7 +86,9 @@ io.on('connection', (socket) => {
       setTimeout(() => {
         room.gameState = 'playing';
         if (mode && mode.includes('soccer')) room.ball = { x:300, y:210, vx:0, vy:0, r:11 };
-        io.to(roomId).emit('gameStarted', { players: room.players, ball: room.ball, mode: room.mode, isRandom: true });
+        io.to(roomId).emit('gameStarted', {
+          players: room.players, ball: room.ball, mode: room.mode, isRandom: true
+        });
       }, 1500);
     } else {
       matchmakingQueue.push({ socket, mode });
@@ -106,7 +114,9 @@ io.on('connection', (socket) => {
     if (!room) return;
     room.gameState = 'playing';
     if (room.mode && room.mode.includes('soccer')) room.ball = {x:300,y:210,vx:0,vy:0,r:11};
-    io.to(socket.roomId).emit('gameStarted', { players: room.players, ball: room.ball, mode: room.mode });
+    io.to(socket.roomId).emit('gameStarted', {
+      players: room.players, ball: room.ball, mode: room.mode
+    });
   });
 
   socket.on('playerMove', (data) => {
@@ -114,21 +124,29 @@ io.on('connection', (socket) => {
     if (!room || !room.players[socket.id]) return;
     const p = room.players[socket.id];
     if (p.dead) return;
-    p.x=data.x; p.y=data.y; p.angle=data.angle; p.ammo=data.ammo;
-    socket.to(socket.roomId).emit('playerMoved', { id:socket.id, x:p.x, y:p.y, angle:p.angle, ammo:p.ammo });
+    // Sunucu tarafında da sınır kontrolü
+    p.x = Math.max(14, Math.min(586, data.x));
+    p.y = Math.max(14, Math.min(406, data.y));
+    p.angle = data.angle;
+    p.ammo = data.ammo;
+    socket.to(socket.roomId).emit('playerMoved', {
+      id: socket.id, x: p.x, y: p.y, angle: p.angle, ammo: p.ammo
+    });
   });
 
   socket.on('shoot', (data) => {
     const room = rooms[socket.roomId];
     if (!room) return;
-    io.to(socket.roomId).emit('bulletFired', { ...data, shooterId:socket.id, team:room.players[socket.id]?.team });
+    io.to(socket.roomId).emit('bulletFired', {
+      ...data, shooterId: socket.id, team: room.players[socket.id]?.team
+    });
   });
 
   socket.on('playerHit', ({ targetId, dmg }) => {
     const room = rooms[socket.roomId];
     if (!room || !room.players[targetId]) return;
     const target = room.players[targetId];
-    if (target.dead || (target.invincible||0)>0) return;
+    if (target.dead || (target.invincible||0) > 0) return;
     target.hp -= dmg;
     target.invincible = 18;
     if (target.hp <= 0) {
@@ -152,16 +170,21 @@ io.on('connection', (socket) => {
     if (!room) return;
     if (team==='blue') room.score.blue++; else room.score.red++;
     io.to(socket.roomId).emit('goalScored', { team, score: room.score });
-    if (room.score.blue>=3 || room.score.red>=3) {
-      room.gameState='ended';
-      io.to(socket.roomId).emit('gameOver', { winner: room.score.blue>=3?'blue':'red', score: room.score });
+    if (room.score.blue >= 3 || room.score.red >= 3) {
+      room.gameState = 'ended';
+      io.to(socket.roomId).emit('gameOver', {
+        winner: room.score.blue>=3?'blue':'red', score: room.score
+      });
     } else {
       room.ball = {x:300,y:210,vx:0,vy:0,r:11};
-      Object.values(room.players).forEach((p,i) => {
+      Object.values(room.players).forEach((p, i) => {
         p.hp=100; p.dead=false; p.invincible=60;
-        const sp=getSpawnPos(p.team,i,room.mode); p.x=sp.x; p.y=sp.y;
+        const sp = getSpawnPos(p.team, i, room.mode);
+        p.x=sp.x; p.y=sp.y;
       });
-      io.to(socket.roomId).emit('roundReset', { players:room.players, ball:room.ball, score:room.score });
+      io.to(socket.roomId).emit('roundReset', {
+        players: room.players, ball: room.ball, score: room.score
+      });
     }
   });
 
@@ -188,15 +211,15 @@ function checkRoundEnd(roomId) {
       room.gameState='ended';
       io.to(roomId).emit('gameOver', { winner, score: room.score });
     } else {
-      Object.values(room.players).forEach((p,i) => {
+      Object.values(room.players).forEach((p, i) => {
         p.hp=100; p.dead=false; p.invincible=60;
-        const sp=getSpawnPos(p.team,i,room.mode); p.x=sp.x; p.y=sp.y;
+        const sp = getSpawnPos(p.team, i, room.mode);
+        p.x=sp.x; p.y=sp.y;
       });
-      io.to(roomId).emit('newRound', { players:room.players, score:room.score, winner });
+      io.to(roomId).emit('newRound', { players: room.players, score: room.score, winner });
     }
   }
 }
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Sunucu: http://localhost:${PORT}`));
-
