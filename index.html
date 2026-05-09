@@ -81,7 +81,6 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
       <p style="color:#888;font-size:11px;margin-top:6px;" id="waitingMsg">Diğer oyuncuları bekliyor...</p>
     </div>
   </div>
-
   <div id="gameArea">
     <div id="myTeamBadge"></div>
     <div id="hud">
@@ -110,7 +109,7 @@ let scale=1;
 function resizeCanvas(){
   const maxW=Math.min(window.innerWidth-8,600);
   scale=maxW/GW;
-  canvas.width=GW; canvas.height=GH;
+  canvas.width=GW;canvas.height=GH;
   canvas.style.width=maxW+'px';
   canvas.style.height=(GH*scale)+'px';
 }
@@ -134,15 +133,17 @@ const ARENA_WALLS=[
 ].map(([x,y])=>({x:x*40,y:y*40,w:40,h:40}));
 
 function rectHit(ax,ay,aw,ah,bx,by,bw,bh){return ax<bx+bw&&ax+aw>bx&&ay<by+bh&&ay+ah>by;}
-function wallHit(x,y,r,walls){for(let w of walls)if(rectHit(x-r,y-r,r*2,r*2,w.x,w.y,w.w,w.h))return true;return false;}
-function tryMoveLocal(obj,dx,dy,walls){
+function wallHit(x,y,r){
+  const walls=myMode==='soccer'?[]:ARENA_WALLS;
+  for(let w of walls)if(rectHit(x-r,y-r,r*2,r*2,w.x,w.y,w.w,w.h))return true;
+  return false;
+}
+function tryMoveLocal(obj,dx,dy){
   const nx=Math.max(obj.r+1,Math.min(GW-obj.r-1,obj.x+dx));
   const ny=Math.max(obj.r+1,Math.min(GH-obj.r-1,obj.y+dy));
-  if(!wallHit(nx,obj.y,obj.r,walls))obj.x=nx;
-  if(!wallHit(obj.x,ny,obj.r,walls))obj.y=ny;
+  if(!wallHit(nx,obj.y,obj.r))obj.x=nx;
+  if(!wallHit(obj.x,ny,obj.r))obj.y=ny;
 }
-
-function detectMobile(){return /Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent)||window.innerWidth<600;}
 
 // Joystick
 let joystickDx=0,joystickDy=0,fireBtnDown=false,kickBtnDown=false;
@@ -196,7 +197,7 @@ socket.on('gameStarted',({players:pl,ball:b,mode})=>{
   const badge=document.getElementById('myTeamBadge');
   badge.textContent=myTeam==='blue'?'🔵 Mavi Takım':'🔴 Kırmızı Takım';
   badge.style.color=myTeam==='blue'?'#5b8ef5':'#e74c3c';
-  isMobile=detectMobile();
+  isMobile=/Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent)||window.innerWidth<600;
   if(isMobile){
     document.getElementById('mobileControls').style.display='block';
     if(myMode==='soccer')document.getElementById('kickBtn').style.display='flex';
@@ -205,12 +206,20 @@ socket.on('gameStarted',({players:pl,ball:b,mode})=>{
   requestAnimationFrame(gameLoop);
 });
 socket.on('playerMoved',({id,x,y,angle,hp})=>{
-  if(players[id]){players[id].x=x;players[id].y=y;players[id].angle=angle;if(hp!==undefined)players[id].hp=hp;}
+  if(players[id]){
+    players[id].x=x;players[id].y=y;players[id].angle=angle;
+    if(hp!==undefined)players[id].hp=hp;
+  }
 });
-socket.on('bulletFired',(data)=>{bullets.push({...data,life:70,dead:false,r:5});});
+socket.on('bulletFired',(data)=>{
+  // Lokal görsel mermi — duvar kontrolü dahil
+  bullets.push({...data,life:70,dead:false,r:5,local:false});
+});
 socket.on('playerDamaged',({id,hp})=>{
   if(players[id]){
-    players[id].hp=hp;players[id].invincible=30;
+    players[id].hp=hp;
+    // Kısa yanıp sönme — sadece 6 frame (0.1 sn)
+    players[id].hitFlash=6;
     spawnParts(players[id].x,players[id].y,TEAM_COLORS[players[id].team]||'#fff',6,3);
   }
 });
@@ -238,11 +247,10 @@ function cancelMatch(){socket.emit('cancelMatch');}
 function joinRoom(){const r=document.getElementById('roomInput').value.trim();if(!r){alert('Oda kodu gir!');return;}myMode=document.getElementById('modeSelect').value;socket.emit('joinRoom',{roomId:r,mode:myMode});}
 function startGame(){socket.emit('startGame');}
 function updateLobbyList(){document.getElementById('playerList').innerHTML=Object.values(players).map(p=>`<span style="color:${p.team==='blue'?'#5b8ef5':'#e74c3c'}">${p.team==='blue'?'🔵':'🔴'} ${p.label} ${p.id===myId?'(Sen)':''}</span>`).join('<br>');}
-function spawnParts(x,y,color,n,spd){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(0.4+Math.random());particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:28,maxLife:28,color,r:2+Math.random()*3});}}
+function spawnParts(x,y,color,n,spd){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(0.4+Math.random());particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:20,maxLife:20,color,r:2+Math.random()*3});}}
 
 function updateMyPlayer(){
   const me=players[myId];if(!me||me.dead)return;
-  const walls=myMode==='soccer'?[]:ARENA_WALLS;
   let dx=0,dy=0,spd=2.5;
   if(isMobile&&(joystickDx||joystickDy)){dx=joystickDx*spd;dy=joystickDy*spd;}
   else{
@@ -250,7 +258,7 @@ function updateMyPlayer(){
     if(keys['a']||keys['arrowleft'])dx=-spd;if(keys['d']||keys['arrowright'])dx=spd;
     if(dx&&dy){dx*=0.707;dy*=0.707;}
   }
-  tryMoveLocal(me,dx,dy,walls);
+  tryMoveLocal(me,dx,dy);
 
   if(myMode==='soccer'&&ball){me.angle=Math.atan2(ball.y-me.y,ball.x-me.x);}
   else{let minD=Infinity;Object.values(players).forEach(p=>{if(p.id!==myId&&!p.dead&&p.team!==myTeam){const d=Math.hypot(p.x-me.x,p.y-me.y);if(d<minD){minD=d;me.angle=Math.atan2(p.y-me.y,p.x-me.x);}}});}
@@ -258,11 +266,9 @@ function updateMyPlayer(){
   if(reloadTimer>0){reloadTimer--;if(reloadTimer<=0)ammo=5;}
   if(shootCooldown>0)shootCooldown--;
   if(kickCooldown>0)kickCooldown--;
-  if(me.invincible>0)me.invincible--;
 
   const fire=keys['c']||keys['ç']||fireBtnDown||kickBtnDown;
   if(fire){
-    // Top vur - sadece sunucuya gönder
     if(myMode==='soccer'&&ball&&kickCooldown===0){
       const dist=Math.hypot(ball.x-me.x,ball.y-me.y);
       if(dist<me.r+ball.r+16){
@@ -273,16 +279,10 @@ function updateMyPlayer(){
         kickCooldown=20;spawnParts(ball.x,ball.y,'#fff',5,3);
       }
     }
-    // Ateş - sunucuya gönder, sunucu hasar hesaplar
     if(shootCooldown===0&&reloadTimer===0&&ammo>0){
       const a=me.angle+(Math.random()-0.5)*0.1;
-      const bData={
-        x:me.x+Math.cos(a)*(me.r+2),y:me.y+Math.sin(a)*(me.r+2),
-        vx:Math.cos(a)*7.5,vy:Math.sin(a)*7.5,
-        color:TEAM_COLORS[myTeam],team:myTeam
-      };
-      // Lokal görsel mermi
-      bullets.push({...bData,shooterId:myId,life:70,dead:false,r:5});
+      const bData={x:me.x+Math.cos(a)*(me.r+2),y:me.y+Math.sin(a)*(me.r+2),vx:Math.cos(a)*7.5,vy:Math.sin(a)*7.5,color:TEAM_COLORS[myTeam],team:myTeam};
+      bullets.push({...bData,shooterId:myId,life:70,dead:false,r:5,local:true});
       socket.emit('shoot',bData);
       ammo--;shootCooldown=14;if(ammo<=0)reloadTimer=45;
     }
@@ -291,9 +291,19 @@ function updateMyPlayer(){
 }
 
 function updateBullets(){
-  // İstemcide sadece görsel — hasar sunucuda hesaplanıyor
-  for(let b of bullets){b.x+=b.vx;b.y+=b.vy;b.life--;}
-  bullets=bullets.filter(b=>b.life>0&&b.x>=0&&b.x<=GW&&b.y>=0&&b.y<=GH);
+  const walls=myMode==='soccer'?[]:ARENA_WALLS;
+  for(let b of bullets){
+    if(b.dead)continue;
+    b.x+=b.vx;b.y+=b.vy;b.life--;
+    if(b.x<0||b.x>GW||b.y<0||b.y>GH||b.life<=0){b.dead=true;continue;}
+    // Duvar çarpışması — istemci tarafında da
+    let hitWall=false;
+    for(let w of walls){
+      if(b.x>w.x&&b.x<w.x+w.w&&b.y>w.y&&b.y<w.y+w.h){hitWall=true;break;}
+    }
+    if(hitWall){b.dead=true;spawnParts(b.x,b.y,'#888',3,2);continue;}
+  }
+  bullets=bullets.filter(b=>!b.dead);
 }
 
 function updateBallLocal(){
@@ -333,14 +343,16 @@ function drawPlayers(){
   Object.values(players).forEach(p=>{
     if(p.dead)return;
     const isMe=p.id===myId,color=TEAM_COLORS[p.team]||'#fff';
-    if((p.invincible||0)>0&&Math.floor((p.invincible||0)/3)%2===0)return;
+    // Vurulunca kırmızı flash — görünmez OLMA, sadece renk değiştir
+    if(p.hitFlash>0)p.hitFlash--;
+    const drawColor=p.hitFlash>0?'#fff':color;
     ctx.save();ctx.translate(p.x,p.y);
     ctx.beginPath();ctx.arc(0,0,16,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,0.3)';ctx.fill();
-    ctx.beginPath();ctx.arc(0,0,13,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+    ctx.beginPath();ctx.arc(0,0,13,0,Math.PI*2);ctx.fillStyle=drawColor;ctx.fill();
     if(isMe){ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=2.5;ctx.stroke();}
     // Can barı
     const pct=Math.max(0,(p.hp||100)/100);
-    ctx.fillStyle='#333';ctx.fillRect(-13,-22,26,4);
+    ctx.fillStyle='#222';ctx.fillRect(-13,-22,26,4);
     ctx.fillStyle=pct>0.5?'#4caf50':pct>0.25?'#f5a623':'#e74c3c';
     ctx.fillRect(-13,-22,26*pct,4);
     ctx.save();ctx.rotate(p.angle||0);ctx.fillStyle='#fff';ctx.beginPath();ctx.roundRect(7,-3,12,6,3);ctx.fill();ctx.restore();
@@ -348,7 +360,12 @@ function drawPlayers(){
     ctx.restore();
   });
 }
-function drawBullets(){for(let b of bullets){ctx.save();ctx.beginPath();ctx.arc(b.x,b.y,5,0,Math.PI*2);ctx.fillStyle=b.color||'#fff';ctx.fill();ctx.restore();}}
+function drawBullets(){
+  for(let b of bullets){
+    ctx.save();ctx.beginPath();ctx.arc(b.x,b.y,5,0,Math.PI*2);
+    ctx.fillStyle=b.color||'#fff';ctx.fill();ctx.restore();
+  }
+}
 function drawParticles(){for(let p of particles){ctx.save();ctx.globalAlpha=p.life/p.maxLife;ctx.beginPath();ctx.arc(p.x,p.y,p.r*(p.life/p.maxLife),0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();ctx.restore();}}
 function drawGoalFlash(){
   if(goalFlash<=0)return;
@@ -394,5 +411,4 @@ document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 </script>
 </body>
 </html>
-  
-  
+        
