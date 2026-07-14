@@ -2,11 +2,33 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---- Oyuncu hesapları (kullanıcı adı + şifre + kupa) ----
+// Not: Basit dosya tabanlı depolama. Railway/Render gibi platformlarda
+// dosya sistemi kalıcı olmayabilir (yeniden deploy'da sıfırlanabilir).
+// Kalıcı kupa geçmişi için ileride gerçek bir veritabanına taşınması önerilir.
+const DATA_FILE = path.join(__dirname, 'data', 'players.json');
+function loadPlayers(){
+  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
+  catch(e){ return {}; }
+}
+function savePlayers(db){
+  try {
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+  } catch(e){ console.error('Oyuncu verisi kaydedilemedi:', e); }
+}
+let playerDB = loadPlayers();
+
+function genSalt(){ return crypto.randomBytes(16).toString('hex'); }
+function hashPassword(password, salt){ return crypto.scryptSync(password, salt, 64).toString('hex'); }
 
 const rooms = {};
 let matchmakingQueue = [];
@@ -58,10 +80,12 @@ function addPlayerToRoom(socket,room,mode){
   const team=assignTeam(room);
   const idx=Object.values(room.players).filter(p=>p.team===team).length;
   const spawn=getSpawnPos(team,idx,mode||room.mode);
+  const acct=playerDB[socket.username];
   room.players[socket.id]={
     id:socket.id,team,x:spawn.x,y:spawn.y,r:13,
     hp:100,maxHp:100,angle:team==='blue'?0:Math.PI,
-    dead:false,label:`P${playerCount+1}`,
+    dead:false,label:socket.username||`P${playerCount+1}`,
+    trophies:acct?acct.trophies:0,
     ammo:5,maxAmmo:5,reloadTimer:0,invincible:0,shootCooldown:0
   };
   socket.join(room.id);
@@ -157,7 +181,9 @@ function handleGoal(room,team){
   io.to(room.id).emit('goalScored',{team,score:room.score});
   if(room.score.blue>=3||room.score.red>=3){
     room.gameState='ended';
-    io.to(room.id).emit('gameOver',{winner:room.score.blue>=3?'blue':'red',score:room.score});
+    const winner=room.score.blue>=3?'blue':'red';
+    io.to(room.id).emit('gameOver',{winner,score:room.score});
+    awardTrophies(room,winner);
   } else {
     setTimeout(()=>{
       room.ball={x:300,y:210,vx:0,vy:0,r:11};
@@ -175,7 +201,34 @@ function handleGoal(room,team){
 io.on('connection',(socket)=>{
   console.log('Bağlantı:',socket.id);
 
+  socket.on('register',({username,password})=>{
+    username=(username||'').trim().slice(0,16);
+    if(!username||!password||password.length<4){
+      socket.emit('authError',{message:'Kullanıcı adı ve en az 4 haneli şifre gerekli.'});return;
+    }
+    if(playerDB[username]){
+      socket.emit('authError',{message:'Bu kullanıcı adı zaten alınmış.'});return;
+    }
+    const salt=genSalt();
+    playerDB[username]={salt,hash:hashPassword(password,salt),trophies:0,wins:0,losses:0,streak:0};
+    savePlayers(playerDB);
+    socket.username=username;
+    socket.emit('authSuccess',{username,trophies:0,streak:0});
+  });
+
+  socket.on('login',({username,password})=>{
+    username=(username||'').trim();
+    const acct=playerDB[username];
+    if(!acct){socket.emit('authError',{message:'Kullanıcı bulunamadı.'});return;}
+    if(hashPassword(password,acct.salt)!==acct.hash){
+      socket.emit('authError',{message:'Şifre yanlış.'});return;
+    }
+    socket.username=username;
+    socket.emit('authSuccess',{username,trophies:acct.trophies,streak:acct.streak||0});
+  });
+
   socket.on('findMatch',({mode})=>{
+    if(!socket.username){socket.emit('authError',{message:'Önce giriş yapmalısın.'});return;}
     const wi=matchmakingQueue.findIndex(q=>q.mode===mode);
     if(wi!==-1){
       const waiting=matchmakingQueue.splice(wi,1)[0];
@@ -202,6 +255,7 @@ io.on('connection',(socket)=>{
   });
 
   socket.on('joinRoom',({roomId,mode})=>{
+    if(!socket.username){socket.emit('authError',{message:'Önce giriş yapmalısın.'});return;}
     if(!rooms[roomId])rooms[roomId]=createRoom(roomId,mode);
     const room=rooms[roomId];
     if(Object.keys(room.players).length>=6){socket.emit('roomFull');return;}
@@ -277,6 +331,43 @@ io.on('connection',(socket)=>{
   });
 });
 
+function awardTrophies(room, winnerTeam){
+  const TROPHY_WIN = 10, TROPHY_LOSS = 5;
+  const STREAK_BONUS_PER_WIN = 2, STREAK_BONUS_CAP = 10; // 6+ galibiyet serisinde bonus tavana ulaşır
+  Object.values(room.players).forEach(p=>{
+    const sock = io.sockets.sockets.get(p.id);
+    const uname = sock && sock.username;
+    if(!uname || !playerDB[uname]) return;
+    const acct = playerDB[uname];
+    if(!acct.streak) acct.streak = 0;
+    if(p.team===winnerTeam){
+      acct.streak += 1;
+      const bonus = Math.min((acct.streak-1)*STREAK_BONUS_PER_WIN, STREAK_BONUS_CAP);
+      const gained = TROPHY_WIN + bonus;
+      acct.trophies += gained;
+      acct.wins = (acct.wins||0) + 1;
+      p.matchDelta = { won:true, gained, streak:acct.streak };
+    } else {
+      acct.streak = 0;
+      acct.trophies = Math.max(0, acct.trophies - TROPHY_LOSS);
+      acct.losses = (acct.losses||0) + 1;
+      p.matchDelta = { won:false, gained:-TROPHY_LOSS, streak:0 };
+    }
+  });
+  savePlayers(playerDB);
+  Object.values(room.players).forEach(p=>{
+    const sock = io.sockets.sockets.get(p.id);
+    if(sock && sock.username && playerDB[sock.username] && p.matchDelta){
+      sock.emit('trophyUpdate',{
+        trophies:playerDB[sock.username].trophies,
+        delta:p.matchDelta.gained,
+        streak:p.matchDelta.streak,
+        won:p.matchDelta.won
+      });
+    }
+  });
+}
+
 function checkRoundEnd(roomId){
   const room=rooms[roomId];if(!room)return;
   const blue=Object.values(room.players).filter(p=>p.team==='blue'&&!p.dead).length;
@@ -287,6 +378,7 @@ function checkRoundEnd(roomId){
     if(room.score.blue>=2||room.score.red>=2){
       room.gameState='ended';
       io.to(roomId).emit('gameOver',{winner,score:room.score});
+      awardTrophies(room,winner);
     } else {
       setTimeout(()=>{
         Object.values(room.players).forEach((p,i)=>{
