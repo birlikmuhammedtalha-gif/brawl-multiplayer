@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname)));
 
 // ---- Oyuncu hesapları (kullanıcı adı + şifre + kupa) ----
 // Not: Basit dosya tabanlı depolama. Railway/Render gibi platformlarda
