@@ -6,7 +6,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 let matchmakingQueue = [];
@@ -54,6 +54,7 @@ function assignTeam(room){
 }
 function addPlayerToRoom(socket,room,mode){
   const playerCount=Object.keys(room.players).length;
+  if(playerCount===0)room.hostId=socket.id;
   const team=assignTeam(room);
   const idx=Object.values(room.players).filter(p=>p.team===team).length;
   const spawn=getSpawnPos(team,idx,mode||room.mode);
@@ -210,6 +211,9 @@ io.on('connection',(socket)=>{
 
   socket.on('startGame',()=>{
     const room=rooms[socket.roomId];if(!room)return;
+    if(room.hostId&&socket.id!==room.hostId)return; // sadece odayı açan başlatabilir
+    if(Object.keys(room.players).length<2)return; // en az 2 oyuncu gerekli
+    if(room.gameState==='playing')return; // zaten başlamış
     room.gameState='playing';
     if(room.mode&&room.mode.includes('soccer'))room.ball={x:300,y:210,vx:0,vy:0,r:11};
     io.to(socket.roomId).emit('gameStarted',{players:room.players,ball:room.ball,mode:room.mode});
@@ -223,7 +227,11 @@ io.on('connection',(socket)=>{
     if(p.dead)return;
     const walls=room.mode&&room.mode.includes('soccer')?[]:ARENA_WALLS;
     // Sunucu tarafında hareket + duvar kontrolü
-    const dx=data.x-p.x, dy=data.y-p.y;
+    let dx=data.x-p.x, dy=data.y-p.y;
+    // Hız hilesi koruması: istemcinin bir mesajda kat edebileceği maksimum mesafeyi sınırla
+    const MAX_MOVE_DIST=4;
+    const dist=Math.hypot(dx,dy);
+    if(dist>MAX_MOVE_DIST){const s=MAX_MOVE_DIST/dist;dx*=s;dy*=s;}
     tryMove(p,dx,dy,walls);
     p.angle=data.angle;p.ammo=data.ammo;
     if(p.invincible>0)p.invincible--;
@@ -255,11 +263,15 @@ io.on('connection',(socket)=>{
   socket.on('disconnect',()=>{
     matchmakingQueue=matchmakingQueue.filter(q=>q.socket.id!==socket.id);
     const room=rooms[socket.roomId];if(!room)return;
+    const leavingRoomId=socket.roomId;
     delete room.players[socket.id];
-    io.to(socket.roomId).emit('playerLeft',{id:socket.id});
+    io.to(leavingRoomId).emit('playerLeft',{id:socket.id});
     if(Object.keys(room.players).length===0){
       if(room.loop)clearInterval(room.loop);
-      delete rooms[socket.roomId];
+      delete rooms[leavingRoomId];
+    } else if(room.gameState==='playing'&&!(room.mode&&room.mode.includes('soccer'))){
+      // Arena modunda: ayrılan oyuncu yüzünden bir takım tamamen boşaldıysa turu bitir
+      checkRoundEnd(leavingRoomId);
     }
     console.log('Ayrıldı:',socket.id);
   });
