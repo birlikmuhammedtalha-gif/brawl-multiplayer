@@ -9,7 +9,12 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:#1a1a2e;font-family:Arial,sans-serif;display:flex;justify-content:center;min-height:100vh;overflow:hidden;}
 #root{width:100%;max-width:620px;display:flex;flex-direction:column;align-items:center;padding:8px 0;}
-#lobby{width:100%;display:flex;flex-direction:column;align-items:center;padding:20px 16px;gap:10px;}
+#lobby{width:100%;display:none;flex-direction:column;align-items:center;padding:20px 16px;gap:10px;}
+#authScreen{width:100%;display:flex;flex-direction:column;align-items:center;padding:20px 16px;gap:10px;}
+#authError{color:#e74c3c;font-size:12px;text-align:center;min-height:14px;}
+#userBar{display:flex;align-items:center;gap:10px;color:#fff;font-size:13px;margin-bottom:2px;}
+#userBar b{color:#f5a623;}
+#streakBadge{color:#ff9800;font-weight:bold;}
 #lobby h1{color:#f5a623;font-size:24px;}
 #lobby p{color:#888;font-size:12px;}
 .section{background:#2d3250;border-radius:10px;padding:14px;width:100%;max-width:320px;}
@@ -51,8 +56,21 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
 </head>
 <body>
 <div id="root">
+  <div id="authScreen">
+    <h1>⚡ Brawl Arena</h1>
+    <p>Devam etmek için giriş yap veya kayıt ol</p>
+    <div class="section">
+      <h3>👤 Hesap</h3>
+      <input id="authUsername" placeholder="Kullanıcı adı" maxlength="16"/>
+      <input id="authPassword" type="password" placeholder="Şifre (en az 4 hane)" maxlength="32"/>
+      <button class="btn btn-orange" onclick="doLogin()">Giriş Yap</button>
+      <button class="btn btn-purple" onclick="doRegister()">Kayıt Ol</button>
+      <div id="authError"></div>
+    </div>
+  </div>
   <div id="lobby">
     <h1>⚡ Brawl Arena</h1>
+    <div id="userBar">👤 <b id="userLabel"></b> &nbsp; 🏆 <b id="userTrophies">0</b> &nbsp; <span id="streakBadge" style="display:none;">🔥 <b id="userStreak">0</b> seri</span></div>
     <p>Arkadaşınla veya rastgele biriyle oyna!</p>
     <div class="section">
       <h3>🎮 Oyun Modu</h3>
@@ -95,12 +113,55 @@ input,select{width:100%;padding:8px 12px;border-radius:6px;border:1px solid #444
       <div id="kickBtn">⚽</div>
     </div>
     <div id="overlay">
-      <h2 id="ovTitle"></h2><p id="ovDesc"></p><div id="ovBtns"></div>
+      <h2 id="ovTitle"></h2><p id="ovDesc"></p><p id="ovTrophyLine" style="color:#f5a623;font-weight:bold;"></p><div id="ovBtns"></div>
     </div>
   </div>
 </div>
 <script>
 const socket=io();
+let myUsername=null,myTrophies=0,myStreak=0;
+const savedUsername=localStorage.getItem('brawlUsername');
+if(savedUsername)document.getElementById('authUsername').value=savedUsername;
+
+function renderStreak(){
+  const badge=document.getElementById('streakBadge');
+  if(myStreak>0){badge.style.display='inline';document.getElementById('userStreak').textContent=myStreak;}
+  else badge.style.display='none';
+}
+
+function doRegister(){
+  const u=document.getElementById('authUsername').value.trim();
+  const p=document.getElementById('authPassword').value;
+  document.getElementById('authError').textContent='';
+  socket.emit('register',{username:u,password:p});
+}
+function doLogin(){
+  const u=document.getElementById('authUsername').value.trim();
+  const p=document.getElementById('authPassword').value;
+  document.getElementById('authError').textContent='';
+  socket.emit('login',{username:u,password:p});
+}
+socket.on('authSuccess',({username,trophies,streak})=>{
+  myUsername=username;myTrophies=trophies;myStreak=streak||0;
+  localStorage.setItem('brawlUsername',username);
+  document.getElementById('authScreen').style.display='none';
+  document.getElementById('lobby').style.display='flex';
+  document.getElementById('userLabel').textContent=username;
+  document.getElementById('userTrophies').textContent=trophies;
+  renderStreak();
+});
+socket.on('authError',({message})=>{
+  document.getElementById('authError').textContent=message;
+});
+let lastMatchDelta=null;
+socket.on('trophyUpdate',({trophies,delta,streak,won})=>{
+  myTrophies=trophies;myStreak=streak||0;
+  document.getElementById('userTrophies').textContent=trophies;
+  renderStreak();
+  lastMatchDelta={delta,streak,won};
+  updateOverlayTrophyLine();
+});
+
 const canvas=document.getElementById('gameCanvas');
 const ctx=canvas.getContext('2d');
 const GW=600,GH=420;
@@ -192,6 +253,7 @@ socket.on('roomUpdate',({players:pl,score:sc,mode,playerCount})=>{
 });
 socket.on('gameStarted',({players:pl,ball:b,mode})=>{
   players=pl;ball=b;myMode=mode||'arena';searching=false;
+  overlayIsFinal=false;lastMatchDelta=null;
   document.getElementById('lobby').style.display='none';
   document.getElementById('gameArea').style.display='flex';
   const badge=document.getElementById('myTeamBadge');
@@ -236,9 +298,21 @@ socket.on('newRound',({players:pl,score:sc,winner})=>{
   players=pl;score=sc;bullets=[];
   showOverlay((winner==='blue'?'🔵 Mavi':'🔴 Kırmızı')+' turu kazandı!','Skor: '+sc.blue+' — '+sc.red,false);
 });
+let overlayIsFinal=false;
 socket.on('gameOver',({winner,score:sc})=>{
+  overlayIsFinal=true;
   showOverlay('🏆 '+(winner==='blue'?'🔵 Mavi':'🔴 Kırmızı')+' Kazandı!','Skor: '+sc.blue+' — '+sc.red,true);
+  document.getElementById('ovTrophyLine').textContent='Kupa hesaplanıyor...';
+  updateOverlayTrophyLine();
 });
+function updateOverlayTrophyLine(){
+  if(!overlayIsFinal||!lastMatchDelta)return;
+  const {delta,streak,won}=lastMatchDelta;
+  const sign=delta>=0?'+':'';
+  let txt=(won?'🏆 ':'📉 ')+sign+delta+' Kupa';
+  if(won&&streak>1)txt+='  •  🔥 '+streak+' maçlık seri!';
+  document.getElementById('ovTrophyLine').textContent=txt;
+}
 socket.on('playerLeft',({id})=>{delete players[id];});
 socket.on('roomFull',()=>alert('Oda dolu!'));
 
@@ -246,7 +320,7 @@ function findMatch(){if(searching)return;myMode=document.getElementById('modeSel
 function cancelMatch(){socket.emit('cancelMatch');}
 function joinRoom(){const r=document.getElementById('roomInput').value.trim();if(!r){alert('Oda kodu gir!');return;}myMode=document.getElementById('modeSelect').value;socket.emit('joinRoom',{roomId:r,mode:myMode});}
 function startGame(){socket.emit('startGame');}
-function updateLobbyList(){document.getElementById('playerList').innerHTML=Object.values(players).map(p=>`<span style="color:${p.team==='blue'?'#5b8ef5':'#e74c3c'}">${p.team==='blue'?'🔵':'🔴'} ${p.label} ${p.id===myId?'(Sen)':''}</span>`).join('<br>');}
+function updateLobbyList(){document.getElementById('playerList').innerHTML=Object.values(players).map(p=>`<span style="color:${p.team==='blue'?'#5b8ef5':'#e74c3c'}">${p.team==='blue'?'🔵':'🔴'} ${p.label} 🏆${p.trophies||0} ${p.id===myId?'(Sen)':''}</span>`).join('<br>');}
 function spawnParts(x,y,color,n,spd){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=spd*(0.4+Math.random());particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:20,maxLife:20,color,r:2+Math.random()*3});}}
 
 function updateMyPlayer(){
@@ -411,4 +485,3 @@ document.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 </script>
 </body>
 </html>
-        
